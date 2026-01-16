@@ -64,7 +64,7 @@ class LCRAssistant:
             print("[Warning] Graph features disabled. Start FalkorDB with 'docker-compose up -d'")
             self.graph_store = None
         
-        self.context_assembler = ContextAssembler(self.vector_store)
+        self.context_assembler = ContextAssembler(self.vector_store, graph_store=self.graph_store)
         self.observer = Observer(graph_store=self.graph_store)
         self.llm: OllamaClient | None = None
     
