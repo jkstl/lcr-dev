@@ -304,5 +304,5 @@ class GraphStore:
     
     def close(self):
         """Close the connection."""
-        if hasattr(self, 'db'):
-            self.db.close()
+        # FalkorDB client doesn't require explicit closing
+        pass
