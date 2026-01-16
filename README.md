@@ -2,8 +2,8 @@
 
 A voice-enabled, privacy-first conversational AI assistant with persistent episodic memory. Runs 100% locally with zero external API calls.
 
-> **Current Status: v0.2.0**  
-> Text-only chat with vector memory and async Observer system for intelligent memory extraction.
+> **Current Status: v0.3.0**  
+> Text-only chat with vector memory, async Observer, streaming output, and FalkorDB graph for entity tracking & contradiction resolution.
 
 ## 🎯 What This Does
 
@@ -24,7 +24,8 @@ LCR: You need to leave by 8:30. Your shift at Acme starts at 9, and with
 ### Prerequisites
 
 1. **Ollama** - Install from [ollama.ai](https://ollama.ai)
-2. **Python 3.11+**
+2. **Docker** (optional) - For graph database features
+3. **Python 3.11+**
 
 ### Setup
 
@@ -37,9 +38,8 @@ ollama pull nomic-embed-text
 cd lcr
 pip install -r requirements.txt
 
-# 3. Create config (optional)
-cp .env.template .env
-# Edit .env to customize settings
+# 3. (Optional) Start FalkorDB for graph features
+docker-compose up -d
 
 # 4. Run the assistant
 python -m src.main
@@ -127,9 +127,11 @@ MAIN_MODEL=qwen3:8b
 - [x] Conversation persistence
 - [x] Rich CLI interface
 - [x] **Observer System** - Utility grading, entity extraction, smart summaries
+- [x] **Streaming Output** - Token-by-token response
+- [x] **Graph Database (FalkorDB)** - Entity-relationship tracking & contradiction resolution
 
 ### Coming Soon
-- [ ] **Graph Database**: Entity-relationship tracking with FalkorDB
+- [ ] **Context enhancement** - Query graph for entity facts
 - [ ] **Cross-encoder Reranking**: Better memory relevance
 - [ ] **Voice Interface**: Whisper STT + Piper TTS
 - [ ] **LangGraph Orchestration**: Advanced state machine

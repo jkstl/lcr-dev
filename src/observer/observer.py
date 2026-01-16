@@ -61,6 +61,7 @@ class Observer:
         self,
         model: str | None = None,
         ollama_host: str | None = None,
+        graph_store=None,  # Optional graph store
     ):
         """
         Initialize the Observer.
@@ -69,10 +70,12 @@ class Observer:
             model: Model to use for extraction (defaults to main model for now,
                    ideally would be a smaller model like phi3.5)
             ollama_host: Ollama API host
+            graph_store: Optional GraphStore instance for entity tracking
         """
         self.model = model or settings.main_model
         self.host = ollama_host or settings.ollama_host
         self._llm: OllamaClient | None = None
+        self.graph_store = graph_store
     
     async def _get_llm(self) -> OllamaClient:
         """Lazy initialize LLM client."""
@@ -114,6 +117,10 @@ class Observer:
                 utility_score=0.0,
                 summary=None,
             )
+        
+        # Store entities and relationships in graph if available
+        if self.graph_store and entities_data:
+            await self._store_in_graph(entities_data)
         
         return ObserverOutput(
             utility_grade=utility_grade,
@@ -237,6 +244,72 @@ class Observer:
             if "[" in text:
                 return []
             return {"entities": [], "relationships": []}
+    
+    async def _store_in_graph(self, entities_data: dict):
+        """Store extracted entities and relationships in the graph."""
+        if not self.graph_store:
+            return
+        
+        try:
+            # Store entities
+            for entity in entities_data.get("entities", []):
+                entity_type = entity.get("type", "Concept")
+                
+                if entity_type == "Person":
+                    self.graph_store.add_person(
+                        name=entity["name"],
+                        relationship_to_user=entity.get("attributes", {}).get("relationship", "unknown"),
+                        attributes=entity.get("attributes")
+                    )
+                else:
+                    # Map entity types to categories
+                    category_map = {
+                        "Technology": "technology",
+                        "Place": "place",
+                        "Organization": "organization",
+                        "Event": "event",
+                        "Concept": "concept"
+                    }
+                    self.graph_store.add_entity(
+                        name=entity["name"],
+                        category=category_map.get(entity_type, "concept"),
+                        attributes=entity.get("attributes")
+                    )
+            
+            # Store relationships with contradiction detection
+            for rel in entities_data.get("relationships", []):
+                subject = rel.get("subject")
+                predicate = rel.get("predicate")
+                obj = rel.get("object")
+                
+                if not (subject and predicate and obj):
+                    continue
+                
+                # Check for contradictions
+                contradictions = self.graph_store.check_contradictions(
+                    subject=subject,
+                    predicate=predicate,
+                    new_object=obj
+                )
+                
+                # Supersede old relationships if contradictions found
+                for contradiction in contradictions:
+                    self.graph_store.supersede_relationship(
+                        subject=subject,
+                        predicate=predicate,
+                        old_object=contradiction["existing_object"]
+                    )
+                
+                # Add new relationship
+                self.graph_store.add_relationship(
+                    subject=subject,
+                    predicate=predicate,
+                    object_name=obj,
+                    metadata=rel.get("metadata", {})
+                )
+        
+        except Exception as e:
+            print(f"[Observer] Error storing in graph: {e}")
     
     async def close(self):
         """Clean up resources."""

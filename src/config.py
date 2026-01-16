@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # Database Paths
     lancedb_path: str = "./data/lancedb"
     conversations_path: str = "./data/conversations"
+    falkordb_host: str = "localhost"
+    falkordb_port: int = 6379
     
     # Memory Settings
     max_context_tokens: int = 3000

@@ -16,6 +16,7 @@ from rich.prompt import Prompt
 from src.config import settings, get_data_dir
 from src.models.llm import OllamaClient
 from src.memory.vector_store import VectorStore
+from src.memory.graph_store import GraphStore
 from src.memory.context_assembler import ContextAssembler
 from src.observer.observer import Observer, UtilityGrade
 
@@ -54,8 +55,17 @@ class LCRAssistant:
         # Initialize components
         get_data_dir()  # Ensure directories exist
         self.vector_store = VectorStore()
+        
+        # Try to initialize graph store (optional - may not have Docker running)
+        try:
+            self.graph_store = GraphStore()
+        except Exception as e:
+            print(f"[Warning] Could not connect to FalkorDB: {e}")
+            print("[Warning] Graph features disabled. Start FalkorDB with 'docker-compose up -d'")
+            self.graph_store = None
+        
         self.context_assembler = ContextAssembler(self.vector_store)
-        self.observer = Observer()
+        self.observer = Observer(graph_store=self.graph_store)
         self.llm: OllamaClient | None = None
     
     async def _get_llm(self) -> OllamaClient:
@@ -237,6 +247,8 @@ class LCRAssistant:
                 await self.llm.close()
             await self.vector_store.close()
             await self.observer.close()
+            if self.graph_store:
+                self.graph_store.close()
             
             self.console.print(Panel.fit(
                 f"[dim]Memories stored: {self.vector_store.count()}[/dim]",

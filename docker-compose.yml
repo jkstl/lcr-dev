@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: lcr-falkordb
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/falkordb:/data
+    command: ["--save", "60", "1"]  # Persist every 60s if 1+ change
+    restart: unless-stopped
