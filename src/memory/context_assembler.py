@@ -78,16 +78,52 @@ class ContextAssembler:
         return "\n".join(lines)
     
     def _format_memories(self, results: list[dict]) -> str:
-        """Format vector search results as context."""
+        """Format vector search results with temporal weighting."""
         if not results:
             return ""
         
+        from datetime import datetime
+        
+        # Add recency scores
+        scored_results = []
+        now = datetime.now()
+        
+        for r in results:
+            # Get creation time
+            created_str = r.get("created_at")
+            if isinstance(created_str, str):
+                try:
+                    created = datetime.fromisoformat(created_str)
+                    days_old = (now - created).days
+                    # Exponential decay: recent=1.0, 30days=0.5, 90days=0.25
+                    recency_score = 2 ** (-days_old / 30)
+                except:
+                    recency_score = 0.5  # Default if no date
+            else:
+                recency_score = 0.5
+            
+            scored_results.append((r, recency_score))
+        
+        # Sort by recency (most recent first)
+        scored_results.sort(key=lambda x: x[1], reverse=True)
+        
         lines = []
-        for i, r in enumerate(results, 1):
+        for i, (r, score) in enumerate(scored_results, 1):
             summary = r.get("summary", "")
             content = r.get("content", "")
-            # Use summary if available, otherwise content preview
             text = summary if summary else content[:200]
+            
+            # Add temporal indicator for very recent (< 7 days)
+            created_str = r.get("created_at", "")
+            if isinstance(created_str, str):
+                try:
+                    created = datetime.fromisoformat(created_str)
+                    days_old = (now - created).days
+                    if days_old < 7:
+                        text = f"[Recent] {text}"
+                except:
+                    pass
+            
             lines.append(f"[Memory {i}] {text}")
         
         return "\n".join(lines)
@@ -126,21 +162,24 @@ class ContextAssembler:
         return "\n".join(facts_lines) if facts_lines else ""
     
     def _build_final_context(self, sliding: str, memories: str, graph_facts: str = "") -> str:
-        """Combine sliding window, memories, and graph facts into final context."""
+        """Combine sliding window, memories, and graph facts with temporal priority."""
         parts = []
         
+        # Priority 1: Graph facts (current truth)
         if graph_facts:
-            parts.append("## Known Facts (from Knowledge Graph)")
+            parts.append("## Current Facts (Knowledge Graph)")
             parts.append(graph_facts)
             parts.append("")
         
+        # Priority 2: Recent memories (temporally weighted)
         if memories:
-            parts.append("## Relevant Memories from Past Conversations")
+            parts.append("## Past Conversations (Recent First)")
             parts.append(memories)
             parts.append("")
         
+        # Priority 3: Sliding window (immediate context)
         if sliding:
-            parts.append("## Recent Conversation")
+            parts.append("## Current Conversation")
             parts.append(sliding)
         
         return "\n".join(parts)
