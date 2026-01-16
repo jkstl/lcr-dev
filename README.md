@@ -45,6 +45,10 @@ docker-compose up -d
 python -m src.main
 ```
 
+## Known Issues
+
+> **⚠️ Important:** The Observer system processes memories in the background (~30-60s). Wait at least 30 seconds after your last message before typing `exit`, otherwise memories won't be stored.
+
 ### First Run
 
 ```
