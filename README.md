@@ -129,9 +129,9 @@ MAIN_MODEL=qwen3:8b
 - [x] **Observer System** - Utility grading, entity extraction, smart summaries
 - [x] **Streaming Output** - Token-by-token response
 - [x] **Graph Database (FalkorDB)** - Entity-relationship tracking & contradiction resolution
+- [x] **Graph-Enhanced Context** - Retrieves entity facts from graph for richer responses
 
 ### Coming Soon
-- [ ] **Context enhancement** - Query graph for entity facts
 - [ ] **Cross-encoder Reranking**: Better memory relevance
 - [ ] **Voice Interface**: Whisper STT + Piper TTS
 - [ ] **LangGraph Orchestration**: Advanced state machine
