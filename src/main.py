@@ -64,6 +64,50 @@ class LCRAssistant:
             self.llm = OllamaClient()
         return self.llm
     
+    async def chat_stream(self, user_input: str):
+        """Process a user message and stream the response."""
+        llm = await self._get_llm()
+        
+        # Add user message to history
+        self.conversation_history.append({
+            "role": "user",
+            "content": user_input,
+            "timestamp": datetime.now().isoformat(),
+        })
+        
+        # Assemble context from memory
+        context = await self.context_assembler.assemble(
+            query=user_input,
+            conversation_history=self.conversation_history,
+        )
+        
+        # Build system prompt with context
+        system = SYSTEM_PROMPT.format(context=context if context else "(No relevant memories yet)")
+        
+        # Generate response with streaming
+        messages = [
+            {"role": msg["role"], "content": msg["content"]}
+            for msg in self.conversation_history
+        ]
+        
+        # Collect full response while yielding chunks
+        full_response = ""
+        async for chunk in llm.stream_chat(messages, system=system):
+            full_response += chunk
+            yield chunk
+        
+        # Add assistant response to history
+        self.conversation_history.append({
+            "role": "assistant",
+            "content": full_response,
+            "timestamp": datetime.now().isoformat(),
+        })
+        
+        # Store the turn in memory (fire-and-forget)
+        asyncio.create_task(self._store_memory(user_input, full_response))
+        
+        self.turn_index += 1
+    
     async def chat(self, user_input: str) -> str:
         """Process a user message and return assistant response."""
         llm = await self._get_llm()
@@ -168,14 +212,16 @@ class LCRAssistant:
                 if not user_input.strip():
                     continue
                 
-                # Show thinking indicator
-                with self.console.status("[dim]Thinking...[/dim]"):
-                    response = await self.chat(user_input)
-                
-                # Display response
+                # Stream response
                 self.console.print()
                 self.console.print("[bold blue]Assistant[/bold blue]")
-                self.console.print(Markdown(response))
+                
+                response_text = ""
+                async for chunk in self.chat_stream(user_input):
+                    self.console.print(chunk, end="")
+                    response_text += chunk
+                
+                self.console.print()  # Newline after response
                 self.console.print()
         
         except KeyboardInterrupt:
