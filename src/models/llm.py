@@ -35,10 +35,19 @@ class OllamaClient:
         # Add options for CPU offloading if specified
         if self._num_gpu is not None:
             payload["options"] = {"num_gpu": self._num_gpu}
+            
+        print(f"[OllamaClient] DEBUG: Sending request to {self.model} with num_gpu={self._num_gpu}")
         
-        response = await self._client.post("/api/generate", json=payload)
-        response.raise_for_status()
-        return response.json()["response"]
+        try:
+            response = await self._client.post("/api/generate", json=payload)
+            response.raise_for_status()
+            return response.json()["response"]
+        except httpx.HTTPStatusError as e:
+            print(f"[OllamaClient] ERROR: HTTP {e.response.status_code} - {e.response.text}")
+            raise
+        except Exception as e:
+            print(f"[OllamaClient] ERROR: {type(e).__name__}: {e}")
+            raise
     
     async def chat(
         self,

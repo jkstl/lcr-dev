@@ -10,35 +10,20 @@
 
 ### Observer CPU Offloading Failure
 
-**Status**: Debugging in progress  
-**Priority**: HIGH
+**Status**: RESOLVED (v0.4.2)
+**Priority**: Normal
 
-The Observer component is configured to run on CPU (`num_gpu=0`) to prevent VRAM contention with the main LLM, but **all Observer tasks are failing silently** when running on CPU.
+The Observer component previously failed when running on CPU (`num_gpu=0`) due to Ollama hanging when receiving concurrent requests.
+ 
+**Resolution**:
+- **Sequential Execution**: Modified `src/observer/observer.py` to execute extraction tasks sequentially instead of in parallel.
+- **Model Optimization**: Default Observer model switched to `qwen3:0.6b` for lightweight CPU performance.
+- **Enhanced Logging**: Added detailed error logging to `src/models/llm.py`.
+ 
+**Verification**:
+- Validated with `reproduce_issue.py` (now deleted).
+- Confirmed stable execution on CPU.
 
-**Symptoms**:
-```
-[Observer] Entity extraction error: 
-[Observer] Summary generation error: 
-[Observer] Utility grading error: 
-[Observer DEBUG] Entities data: {'entities': [], 'relationships': []}
-```
-
-**What We Know**:
-- Main LLM (qwen3:14b on GPU) works correctly
-- Reranker (BGE-Reranker-v2-m3 on GPU) works correctly
-- Observer (qwen3:4b with `num_gpu=0`) returns empty responses
-- Error messages are empty (exception has no message)
-- Traceback logging was added but not yet tested
-
-**Files Involved**:
-- `src/models/llm.py` - Added `num_gpu` parameter to `OllamaClient`
-- `src/observer/observer.py` - Uses `num_gpu=0` for CPU offloading
-- `src/config.py` - `observer_model: str = "qwen3:4b"`
-
-**Next Steps**:
-1. Pull latest code and run to get full traceback output
-2. Determine if Ollama rejects `num_gpu=0` or if it's a timeout issue
-3. Possible fixes: increase timeout further, try different `num_gpu` value, or revert to GPU with model swapping
 
 ---
 

@@ -101,15 +101,8 @@ class Observer:
         """
         combined = f"USER: {user_message}\nASSISTANT: {assistant_response}"
         
-        # Run all extraction tasks in parallel for efficiency
-        utility_task = self._grade_utility(combined)
-        summary_task = self._generate_summary(combined)
-        entity_task = self._extract_entities(combined)
-        query_task = self._generate_retrieval_queries(combined)
-        
-        utility_grade, summary, entities_data, queries = await asyncio.gather(
-            utility_task, summary_task, entity_task, query_task
-        )
+        # Run tasks sequentially to prevent CPU overload/Ollama hangs
+        utility_grade = await self._grade_utility(combined)
         
         # Early return for discardable content
         if utility_grade == UtilityGrade.DISCARD:
@@ -118,6 +111,10 @@ class Observer:
                 utility_score=0.0,
                 summary=None,
             )
+            
+        summary = await self._generate_summary(combined)
+        entities_data = await self._extract_entities(combined)
+        queries = await self._generate_retrieval_queries(combined)
         
         # Store entities and relationships in graph if available
         if self.graph_store and entities_data:
