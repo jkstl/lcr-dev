@@ -114,8 +114,10 @@ class LCRAssistant:
             "timestamp": datetime.now().isoformat(),
         })
         
-        # Store the turn in memory (fire-and-forget)
-        asyncio.create_task(self._store_memory(user_input, full_response))
+        # Store the turn in memory (fire-and-forget - track task)
+        task = asyncio.create_task(self._store_memory(user_input, full_response))
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
         
         self.turn_index += 1
     
