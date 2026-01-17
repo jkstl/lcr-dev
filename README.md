@@ -47,7 +47,9 @@ python -m src.main
 
 ## Known Issues
 
-> **⚠️ Important:** The Observer system processes memories in the background (~30-60s). Wait at least 30 seconds after your last message before typing `exit`, otherwise memories won't be stored.
+> **⚠️ Observer Processing Delay:** The Observer processes memories in the background. When you type `exit`, the system will wait for all processing tasks to complete before closing. This may take 10-60 seconds depending on conversation complexity.
+
+> **⚠️ Entity Extraction Limitations:** The Observer extracts entity ownership well (e.g., "User OWNS Dell Latitude 5520") but struggles with intent/plan changes (e.g., "plans to sell" → "using as home server"). This limits contradiction detection for non-ownership relationships. **Status:** Requires prompt engineering improvements.
 
 ### First Run
 

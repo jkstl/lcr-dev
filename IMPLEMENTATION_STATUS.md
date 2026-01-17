@@ -38,9 +38,10 @@
 - Cross-encoder reranking
 
 ### 🐛 Known Issues
-1. **Observer Delay**: Async processing takes 30-60s. Users must wait before exiting or memories aren't stored.
+1. **Observer Processing Delay**: Background tasks take 10-60s to complete. System waits at shutdown with message: `"Waiting for X memory processing task(s) to complete..."`
 2. **Docker Setup**: FalkorDB requires Docker Compose V2 (`/usr/local/bin/docker-compose` on Ubuntu 24.04 due to distutils compatibility)
 3. **Model**: Currently uses `qwen3:14b` (newer than spec's `qwen2.5:14b`)
+4. **Entity Extraction Limitations**: Observer extracts ownership relationships well (USER → OWNS → Dell Latitude 5520) but fails to extract intent/plan relationships (e.g., "planning to sell" vs "using as home server"). This limits contradiction detection to ownership changes only. Requires improved extraction prompts.
 
 ---
 
