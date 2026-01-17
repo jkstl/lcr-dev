@@ -1,154 +1,143 @@
-# CLAUDE.md — Local Cognitive RAG (LCR) System
-## Authoritative Architectural Blueprint v1.0
+# LCR Implementation Status
 
-> **Purpose**: This document defines the complete technical specification for a local, privacy-first conversational AI assistant with persistent episodic memory. Any coding agent (Claude Code, Codex, Cursor) should be able to implement this system from this specification alone.
+> **Last Updated**: 2026-01-17  
+> **Current Version**: v0.4.1  
+> **Repository**: https://github.com/jkstl/lcr-dev
 
 ---
 
-## IMPLEMENTATION STATUS (As of 2026-01-16)
+## 🚨 CURRENT BLOCKING ISSUE
 
-### ✅ Phase 1: MVP Complete
-- Vector memory with LanceDB
-- Ollama integration (Qwen3:14b + nomic-embed-text)
-- Basic CLI with Rich interface
-- Conversation persistence
+### Observer CPU Offloading Failure
 
-### ✅ Phase 2: Observer System Complete
-- Async utility grading (DISCARD/LOW/MEDIUM/HIGH)
-- Entity/relationship extraction
-- Summary generation
-- Retrieval query pre-generation
-- **Fire-and-forget processing** (30-60s delay before memories persist)
+**Status**: Debugging in progress  
+**Priority**: HIGH
 
-### ✅ Phase 3: Graph Database Complete
-- FalkorDB integration via Docker
-- Person & Entity nodes in graph
-- Relationship tracking (WORKS_AT, KNOWS, OWNS, PLANS_TO, CURRENTLY_USING_AS, etc.)
-- **Contradiction detection & supersession** (marks old facts as `still_valid: false`)
-- Graph-enhanced context assembly
-- **Temporal intent/state relationships** (v0.3.1) - Observer extracts temporal changes
+The Observer component is configured to run on CPU (`num_gpu=0`) to prevent VRAM contention with the main LLM, but **all Observer tasks are failing silently** when running on CPU.
 
-### ✅ Phase 4: Cross-Encoder Reranking Complete (v0.4.0)
-- BGE-Reranker-v2-m3 integration
-- Two-stage retrieval: vector search (top-15) → rerank → select (top-5)
-- Improved memory relevance scoring vs vector-only
-- GPU/CPU device auto-detection with graceful fallback
-- Configurable via settings (can disable with `use_reranker: false`)
+**Symptoms**:
+```
+[Observer] Entity extraction error: 
+[Observer] Summary generation error: 
+[Observer] Utility grading error: 
+[Observer DEBUG] Entities data: {'entities': [], 'relationships': []}
+```
 
-### ⏸️ Deferred Features
+**What We Know**:
+- Main LLM (qwen3:14b on GPU) works correctly
+- Reranker (BGE-Reranker-v2-m3 on GPU) works correctly
+- Observer (qwen3:4b with `num_gpu=0`) returns empty responses
+- Error messages are empty (exception has no message)
+- Traceback logging was added but not yet tested
+
+**Files Involved**:
+- `src/models/llm.py` - Added `num_gpu` parameter to `OllamaClient`
+- `src/observer/observer.py` - Uses `num_gpu=0` for CPU offloading
+- `src/config.py` - `observer_model: str = "qwen3:4b"`
+
+**Next Steps**:
+1. Pull latest code and run to get full traceback output
+2. Determine if Ollama rejects `num_gpu=0` or if it's a timeout issue
+3. Possible fixes: increase timeout further, try different `num_gpu` value, or revert to GPU with model swapping
+
+---
+
+## ✅ Completed Phases
+
+### Phase 1: MVP (v0.1.0)
+- [x] Vector memory with LanceDB
+- [x] Ollama integration (Qwen3:14b + nomic-embed-text)
+- [x] Basic CLI with Rich interface
+- [x] Conversation persistence to JSON
+
+### Phase 2: Observer System (v0.2.0)
+- [x] Async utility grading (DISCARD/LOW/MEDIUM/HIGH)
+- [x] Entity/relationship extraction
+- [x] Summary generation
+- [x] Retrieval query pre-generation
+- [x] Fire-and-forget background processing
+
+### Phase 3: Graph Database (v0.3.0)
+- [x] FalkorDB integration via Docker
+- [x] Person & Entity nodes in graph
+- [x] Relationship tracking (OWNS, WORKS_AT, KNOWS, etc.)
+- [x] Contradiction detection & supersession
+- [x] Graph-enhanced context assembly
+
+### Phase 3.1: Temporal Entity Extraction (v0.3.1)
+- [x] Added temporal relationship types (PLANS_TO, CURRENTLY_USING_AS, IN_STATE, WAS_IN_STATE)
+- [x] Enhanced extraction prompt with examples
+- [x] Added RELATED_TO flexible pattern for domain-specific relationships
+
+### Phase 4: Cross-Encoder Reranking (v0.4.0)
+- [x] BGE-Reranker-v2-m3 integration
+- [x] Two-stage retrieval: vector (top-15) → rerank (top-5)
+- [x] GPU/CPU auto-detection with fallback
+- [x] Added `sentence-transformers` dependency
+
+### Phase 4.1: Observer Model Separation (v0.4.1) - IN PROGRESS
+- [x] Added `observer_model` config setting (qwen3:4b)
+- [x] Added `num_gpu` parameter to OllamaClient
+- [x] Observer uses CPU offloading (`num_gpu=0`)
+- [ ] **BLOCKED**: Observer fails silently on CPU (see above)
+
+---
+
+## ⏸️ Deferred Features
+
 - Voice interface (Whisper STT + Piper TTS)
 - LangGraph orchestration
 - Redis task queue
 
-### 🐛 Known Issues
-1. **~~Observer Processing Delay~~**: ✅ **Improved** - Observer now uses smaller `qwen3:4b` model (configurable via `observer_model` setting) instead of main 14B model, significantly reducing processing time.
-2. **Docker Setup**: FalkorDB requires Docker Compose V2 (`/usr/local/bin/docker-compose` on Ubuntu 24.04 due to distutils compatibility)
-3. **Model**: Main LLM uses `qwen3:14b`, Observer uses `qwen3:4b`
-4. **~~Entity Extraction Limitations~~**: ✅ **FIXED** (v0.3.1) - Observer now extracts temporal intent/state relationships (PLANS_TO, CURRENTLY_USING_AS, IN_STATE, etc.) in addition to ownership. Contradiction detection now works for intent changes like "planning to sell" → "using as home server". Enhanced extraction prompt includes temporal relationship types and metadata guidance.
-5. **Graph Contradiction Detection**: Requires FalkorDB to be running via Docker. Without it, Observer still extracts entities/relationships but cannot detect contradictions or persist to graph store.
+---
+
+## 🏗️ Architecture Overview
+
+### Resource Allocation (Target)
+| Component | Device | VRAM/RAM |
+|-----------|--------|----------|
+| Main LLM (qwen3:14b) | GPU | ~10GB VRAM |
+| Reranker (BGE-v2-m3) | GPU | ~2.1GB VRAM |
+| Observer (qwen3:4b) | **CPU** | ~3GB RAM |
+| LanceDB | CPU | RAM cache |
+| FalkorDB | Docker | Disk + RAM |
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| `src/main.py` | CLI entry point, LCRAssistant class |
+| `src/config.py` | Pydantic settings (models, paths, etc.) |
+| `src/models/llm.py` | OllamaClient with `num_gpu` support |
+| `src/models/reranker.py` | BGE-Reranker-v2-m3 wrapper |
+| `src/observer/observer.py` | Background memory extraction |
+| `src/observer/prompts.py` | Extraction prompt templates |
+| `src/memory/vector_store.py` | LanceDB operations |
+| `src/memory/graph_store.py` | FalkorDB operations |
+| `src/memory/context_assembler.py` | Retrieval + reranking |
 
 ---
 
-## 1. PROJECT OVERVIEW
+## 📋 Testing Checklist
 
-### 1.1 What This System Does
-A voice-enabled conversational AI that:
-- Remembers everything the user tells it across sessions (work schedules, relationships, owned technology, preferences)
-- Retrieves relevant memories automatically when answering questions
-- Learns the user's personality, communication style, and life context over time
-- Runs 100% locally with zero external API calls
-
-### 1.2 Example Interactions After Training
-```
-User: "What time do I need to be at work tomorrow?"
-System: [Retrieves: User works at Acme Corp, shift starts 9am, 30min commute]
-Response: "You need to leave by 8:30. Your shift at Acme starts at 9, and with your usual commute from Cedar Park, that gives you a small buffer."
-
-User: "Should I text Sarah back?"
-System: [Retrieves: Recent tension with Sarah, user expressed feeling overwhelmed, Sarah's communication pattern]
-Response: "Based on what you've shared, you were feeling pretty drained after your last exchange. If you're not ready, it's okay to wait until tomorrow. What's making you hesitate?"
-```
-
-### 1.3 Hardware Constraints
-| Resource | Limit | Allocation Strategy |
-|----------|-------|---------------------|
-| VRAM | 16GB | Main LLM ~10GB, Reranker ~0.5GB, Buffer ~5.5GB |
-| System RAM | 32GB | Vector DB, Graph DB, Application |
-| Storage | SSD Required | LanceDB disk-persistence, conversation logs |
-| Network | None | 100% air-gapped capable |
-
----
-
-## 2. TECHNOLOGY STACK
-
-### 2.1 Core Components
-
-| Component | Technology | Version/Variant | Resource Placement |
-|-----------|------------|-----------------|-------------------|
-| **Runtime** | Python | 3.11+ | CPU |
-| **Main LLM** | Qwen 3 Instruct | 14B Q4_K_M (GGUF) | VRAM (~10GB) |
-| **Observer LLM** | Phi-3.5 Mini Instruct | 3.8B Q4_K_M | CPU (offloaded) |
-| **Embedding Model** | nomic-embed-text | v1.5 | CPU |
-| **Reranker** | BGE-Reranker | v2-m3 | VRAM (~0.5GB) |
-| **Vector Database** | LanceDB | Latest | Disk + RAM cache |
-| **Graph Database** | FalkorDB | Latest | Docker container |
-| **Orchestration** | LangGraph | Latest | CPU |
-| **LLM Backend** | Ollama | Latest | Manages GGUF models |
-| **Voice Input** | Whisper.cpp | Medium model | CPU |
-| **Voice Output** | Piper TTS | en_US-lessac-medium | CPU |
-
-### 2.2 Python Dependencies
-```
-# requirements.txt (CURRENT as of v0.3.0)
-ollama>=0.3.0
-lancedb>=0.6.0
-falkordb>=1.0.0
-numpy>=1.26.0
-pydantic>=2.0.0
-pydantic-settings>=2.0.0
-python-dotenv>=1.0.0
-rich>=13.0.0
-httpx>=0.27.0
-
-# NOT YET IMPLEMENTED:
-# sentence-transformers>=2.7.0  # For reranker
-# langgraph>=0.1.0
-# redis>=5.0.0
-# faster-whisper>=1.0.0
-# piper-tts>=1.0.0
-# sounddevice>=0.4.6
-```
-
-### 2.3 Ollama Model Setup
+Before testing, ensure:
 ```bash
-# Install models (run once)
-ollama pull qwen3:14b              # Currently using qwen3 instead of qwen2.5
-ollama pull nomic-embed-text
+# Required models
+ollama pull qwen3:14b
+ollama pull qwen3:4b
 
-# NOT YET USED:
-# ollama pull phi3.5:3.8b-mini-instruct-q4_K_M  # For Observer (future optimization)
+# Optional: FalkorDB for graph features
+docker compose up -d
+
+# Install dependencies
+pip install -r requirements.txt
 ```
 
-### 2.4 Docker Services
-```yaml
-# docker-compose.yml (CURRENT)
-version: '3.8'
-services:
-  falkordb:
-    image: falkordb/falkordb:latest
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./data/falkordb:/data
-    command: ["--save", "60", "1"]  # Persist every 60s if 1+ change
-
-# NOT YET IMPLEMENTED:
-#   redis:
-#     image: redis:7-alpine
-#     ports:
-#       - "6380:6379"
-```
+Run: `python -m src.main`
 
 ---
 
-*[Rest of CLAUDE.md continues unchanged...]*
+## 📚 Reference Documents
+
+- **CLAUDE.md** - Full technical specification (authoritative)
+- **README.md** - User-facing overview and quick start
+- **requirements.txt** - Python dependencies
