@@ -11,7 +11,8 @@ class OllamaClient:
     def __init__(self, host: str | None = None, model: str | None = None):
         self.host = host or settings.ollama_host
         self.model = model or settings.main_model
-        self._client = httpx.AsyncClient(base_url=self.host, timeout=120.0)
+        # Increased timeout for model swapping scenarios (main ↔ observer models)
+        self._client = httpx.AsyncClient(base_url=self.host, timeout=300.0)
     
     async def generate(
         self,
