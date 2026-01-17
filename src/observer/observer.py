@@ -160,7 +160,9 @@ class Observer:
                 
         except Exception as e:
             # On error, default to MEDIUM to avoid losing data
-            print(f"[Observer] Utility grading error: {e}")
+            import traceback
+            print(f"[Observer] Utility grading error: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return UtilityGrade.MEDIUM
     
     async def _generate_summary(self, text: str) -> str:
@@ -174,7 +176,9 @@ class Observer:
             )
             return response.strip()
         except Exception as e:
-            print(f"[Observer] Summary generation error: {e}")
+            import traceback
+            print(f"[Observer] Summary generation error: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return ""
     
     async def _extract_entities(self, text: str) -> dict:
@@ -188,7 +192,9 @@ class Observer:
             )
             return self._parse_json(response)
         except Exception as e:
-            print(f"[Observer] Entity extraction error: {e}")
+            import traceback
+            print(f"[Observer] Entity extraction error: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return {"entities": [], "relationships": []}
     
     async def _generate_retrieval_queries(self, text: str) -> list[str]:
@@ -205,7 +211,9 @@ class Observer:
                 return queries
             return []
         except Exception as e:
-            print(f"[Observer] Query generation error: {e}")
+            import traceback
+            print(f"[Observer] Query generation error: {type(e).__name__}: {e}")
+            traceback.print_exc()
             return []
     
     def _parse_json(self, text: str) -> dict | list:
