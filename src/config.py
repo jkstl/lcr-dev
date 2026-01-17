@@ -23,6 +23,13 @@ class Settings(BaseSettings):
     sliding_window_turns: int = 10
     vector_search_top_k: int = 5
     
+    # Reranker Settings (Phase 4)
+    use_reranker: bool = True
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str | None = None  # Auto-detect if None
+    reranker_top_k: int = 5  # Final selection after reranking
+    vector_candidates_k: int = 15  # Candidates for reranking (before selection)
+    
     # Logging
     log_level: str = "INFO"
     

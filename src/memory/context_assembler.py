@@ -20,15 +20,22 @@ class ContextAssembler:
         self,
         vector_store,
         graph_store=None,
+        reranker=None,  # Phase 4: Cross-encoder reranker
         max_context_tokens: int | None = None,
         sliding_window_turns: int | None = None,
         vector_search_top_k: int | None = None,
     ):
         self.vector_store = vector_store
         self.graph_store = graph_store
+        self.reranker = reranker
         self.max_context_tokens = max_context_tokens or settings.max_context_tokens
         self.sliding_window_turns = sliding_window_turns or settings.sliding_window_turns
         self.vector_search_top_k = vector_search_top_k or settings.vector_search_top_k
+        
+        # Use reranker settings if reranker is available
+        if self.reranker:
+            self.vector_candidates_k = settings.vector_candidates_k
+            self.reranker_top_k = settings.reranker_top_k
     
     async def assemble(
         self,
@@ -45,10 +52,16 @@ class ContextAssembler:
         sliding_context = self._get_sliding_window(conversation_history)
         
         # Step 2: Search vector store for relevant memories
+        # If reranker available, get more candidates for reranking
+        search_k = self.vector_candidates_k if self.reranker else self.vector_search_top_k
         vector_results = await self.vector_store.search(
             query=query,
-            top_k=self.vector_search_top_k,
+            top_k=search_k,
         )
+        
+        # Step 2.5: Rerank results if reranker is available (Phase 4)
+        if self.reranker and vector_results:
+            vector_results = self._rerank_results(query, vector_results)
         
         # Step 3: Query graph for entity facts (if graph store available)
         graph_facts = ""
@@ -183,6 +196,31 @@ class ContextAssembler:
             parts.append(sliding)
         
         return "\n".join(parts)
+    
+    def _rerank_results(self, query: str, results: list[dict]) -> list[dict]:
+        """Rerank vector search results using cross-encoder (Phase 4)."""
+        if not results or not self.reranker:
+            return results
+        
+        # Extract documents (use summary if available, else truncated content)
+        documents = []
+        for r in results:
+            summary = r.get("summary", "")
+            content = r.get("content", "")
+            doc = summary if summary else content[:500]
+            documents.append(doc)
+        
+        # Rerank using cross-encoder
+        reranked_indices = self.reranker.rerank(
+            query=query,
+            documents=documents,
+            top_k=self.reranker_top_k
+        )
+        
+        # Return reordered results (only top_k)
+        reranked_results = [results[idx] for idx, score in reranked_indices]
+        
+        return reranked_results
     
     def _count_tokens(self, text: str) -> int:
         """Approximate token count (1 token ≈ 4 chars for English)."""

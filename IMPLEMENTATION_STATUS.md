@@ -23,25 +23,29 @@
 ### ✅ Phase 3: Graph Database Complete
 - FalkorDB integration via Docker
 - Person & Entity nodes in graph
-- Relationship tracking (WORKS_AT, KNOWS, OWNS, etc.)
+- Relationship tracking (WORKS_AT, KNOWS, OWNS, PLANS_TO, CURRENTLY_USING_AS, etc.)
 - **Contradiction detection & supersession** (marks old facts as `still_valid: false`)
 - Graph-enhanced context assembly
+- **Temporal intent/state relationships** (v0.3.1) - Observer extracts temporal changes
 
-### 🔄 Phase 4: Cross-Encoder Reranking (Planned)
-- BGE-Reranker-v2-m3 for better memory relevance
-- Two-stage retrieval: vector search → rerank → LLM
+### ✅ Phase 4: Cross-Encoder Reranking Complete (v0.4.0)
+- BGE-Reranker-v2-m3 integration
+- Two-stage retrieval: vector search (top-15) → rerank → select (top-5)
+- Improved memory relevance scoring vs vector-only
+- GPU/CPU device auto-detection with graceful fallback
+- Configurable via settings (can disable with `use_reranker: false`)
 
 ### ⏸️ Deferred Features
 - Voice interface (Whisper STT + Piper TTS)
 - LangGraph orchestration
 - Redis task queue
-- Cross-encoder reranking
 
 ### 🐛 Known Issues
 1. **Observer Processing Delay**: Background tasks take 10-60s to complete. System waits at shutdown with message: `"Waiting for X memory processing task(s) to complete..."`
 2. **Docker Setup**: FalkorDB requires Docker Compose V2 (`/usr/local/bin/docker-compose` on Ubuntu 24.04 due to distutils compatibility)
 3. **Model**: Currently uses `qwen3:14b` (newer than spec's `qwen2.5:14b`)
-4. **Entity Extraction Limitations**: Observer extracts ownership relationships well (USER → OWNS → Dell Latitude 5520) but fails to extract intent/plan relationships (e.g., "planning to sell" vs "using as home server"). This limits contradiction detection to ownership changes only. Requires improved extraction prompts.
+4. **~~Entity Extraction Limitations~~**: ✅ **FIXED** (v0.3.1) - Observer now extracts temporal intent/state relationships (PLANS_TO, CURRENTLY_USING_AS, IN_STATE, etc.) in addition to ownership. Contradiction detection now works for intent changes like "planning to sell" → "using as home server". Enhanced extraction prompt includes temporal relationship types and metadata guidance.
+5. **Graph Contradiction Detection**: Requires FalkorDB to be running via Docker. Without it, Observer still extracts entities/relationships but cannot detect contradictions or persist to graph store.
 
 ---
 

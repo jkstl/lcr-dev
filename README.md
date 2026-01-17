@@ -2,8 +2,8 @@
 
 A voice-enabled, privacy-first conversational AI assistant with persistent episodic memory. Runs 100% locally with zero external API calls.
 
-> **Current Status: v0.3.0**  
-> Text-only chat with vector memory, async Observer, streaming output, and FalkorDB graph for entity tracking & contradiction resolution.
+> **Current Status: v0.4.0**  
+> Text-only chat with vector memory, async Observer, streaming output, FalkorDB graph for entity tracking & contradiction resolution, and cross-encoder reranking for improved memory relevance.
 
 ## 🎯 What This Does
 
@@ -49,7 +49,7 @@ python -m src.main
 
 > **⚠️ Observer Processing Delay:** The Observer processes memories in the background. When you type `exit`, the system will wait for all processing tasks to complete before closing. This may take 10-60 seconds depending on conversation complexity.
 
-> **⚠️ Entity Extraction Limitations:** The Observer extracts entity ownership well (e.g., "User OWNS Dell Latitude 5520") but struggles with intent/plan changes (e.g., "plans to sell" → "using as home server"). This limits contradiction detection for non-ownership relationships. **Status:** Requires prompt engineering improvements.
+> **~~Entity Extraction Limitations~~** ✅ **FIXED in v0.3.1:** The Observer now successfully extracts temporal intent and state changes (e.g., "plans to sell" → "using as home server") in addition to ownership relationships. Enhanced extraction prompt includes relationship types like PLANS_TO, CURRENTLY_USING_AS, IN_STATE, etc. Contradiction detection now works for all relationship types.
 
 ### First Run
 
@@ -127,7 +127,7 @@ MAIN_MODEL=qwen3:8b
 
 ## 🔮 Roadmap
 
-### Current
+### Current (v0.4.0)
 - [x] Basic chat with memory
 - [x] LanceDB vector storage
 - [x] Conversation persistence
@@ -136,9 +136,10 @@ MAIN_MODEL=qwen3:8b
 - [x] **Streaming Output** - Token-by-token response
 - [x] **Graph Database (FalkorDB)** - Entity-relationship tracking & contradiction resolution
 - [x] **Graph-Enhanced Context** - Retrieves entity facts from graph for richer responses
+- [x] **Temporal Intent Extraction** (v0.3.1) - Observer extracts state/intent changes  
+- [x] **Cross-Encoder Reranking** (v0.4.0) - BGE-Reranker-v2-m3 for improved memory relevance
 
 ### Coming Soon
-- [ ] **Cross-encoder Reranking**: Better memory relevance
 - [ ] **Voice Interface**: Whisper STT + Piper TTS
 - [ ] **LangGraph Orchestration**: Advanced state machine
 

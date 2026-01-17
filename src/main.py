@@ -65,7 +65,26 @@ class LCRAssistant:
             print("[Warning] Graph features disabled. Start FalkorDB with 'docker-compose up -d'")
             self.graph_store = None
         
-        self.context_assembler = ContextAssembler(self.vector_store, graph_store=self.graph_store)
+        # Try to initialize reranker (Phase 4 - optional, graceful degradation)
+        self.reranker = None
+        if settings.use_reranker:
+            try:
+                from src.models.reranker import Reranker
+                print("[Setup] Loading cross-encoder reranker...")
+                self.reranker = Reranker(
+                    model_name=settings.reranker_model,
+                    device=settings.reranker_device
+                )
+                print(f"[Setup] Reranker loaded ({self.reranker.get_vram_usage()})")
+            except Exception as e:
+                print(f"[Warning] Could not load reranker: {e}")
+                print("[Warning] Using vector search only (no reranking)")
+        
+        self.context_assembler = ContextAssembler(
+            self.vector_store,
+            graph_store=self.graph_store,
+            reranker=self.reranker  # Phase 4
+        )
         self.observer = Observer(graph_store=self.graph_store)
         self.llm: OllamaClient | None = None
     
@@ -257,6 +276,8 @@ class LCRAssistant:
                 await self.llm.close()
             await self.vector_store.close()
             await self.observer.close()
+            if self.reranker:
+                self.reranker.close()
             if self.graph_store:
                 self.graph_store.close()
             
