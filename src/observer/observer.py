@@ -18,7 +18,8 @@ from src.models.llm import OllamaClient
 from src.config import settings
 from src.observer.prompts import (
     UTILITY_GRADING_PROMPT,
-    ENTITY_EXTRACTION_PROMPT,
+    USER_EXTRACTION_PROMPT,
+    ASSISTANT_EXTRACTION_PROMPT,
     SUMMARY_PROMPT,
     RETRIEVAL_QUERIES_PROMPT,
 )
@@ -91,19 +92,19 @@ class Observer:
     ) -> ObserverOutput:
         """
         Process a conversation turn and extract memory-relevant information.
-        
+
         Args:
             user_message: The user's message
             assistant_response: The assistant's response
-            
+
         Returns:
             ObserverOutput with utility grade, summary, entities, relationships, and queries
         """
         combined = f"USER: {user_message}\nASSISTANT: {assistant_response}"
-        
+
         # Run tasks sequentially to prevent CPU overload/Ollama hangs
         utility_grade = await self._grade_utility(combined)
-        
+
         # Early return for discardable content
         if utility_grade == UtilityGrade.DISCARD:
             return ObserverOutput(
@@ -111,21 +112,37 @@ class Observer:
                 utility_score=0.0,
                 summary=None,
             )
-            
+
         summary = await self._generate_summary(combined)
-        entities_data = await self._extract_entities(combined)
+
+        # Dual extraction: user facts and assistant actions
+        user_data = await self._extract_user_facts(user_message, assistant_response)
+
+        # Skip assistant extraction for LOW utility (optimization)
+        if utility_grade == UtilityGrade.LOW:
+            assistant_data = {"entities": [], "relationships": []}
+        else:
+            assistant_data = await self._extract_assistant_actions(assistant_response, user_message)
+
         queries = await self._generate_retrieval_queries(combined)
-        
-        # Store entities and relationships in graph if available
-        if self.graph_store and entities_data:
-            await self._store_in_graph(entities_data)
-        
+
+        # Store in graph if available
+        if self.graph_store:
+            if user_data:
+                await self._store_in_graph(user_data, source="USER")
+            if assistant_data and assistant_data.get("relationships"):
+                await self._store_in_graph(assistant_data, source="ASSISTANT")
+
+        # Combine entities and relationships for output
+        all_entities = user_data.get("entities", []) + assistant_data.get("entities", [])
+        all_relationships = user_data.get("relationships", []) + assistant_data.get("relationships", [])
+
         return ObserverOutput(
             utility_grade=utility_grade,
             utility_score=self.UTILITY_SCORES[utility_grade],
             summary=summary,
-            entities=entities_data.get("entities", []),
-            relationships=entities_data.get("relationships", []),
+            entities=all_entities,
+            relationships=all_relationships,
             retrieval_queries=queries,
         )
     
@@ -178,19 +195,41 @@ class Observer:
             traceback.print_exc()
             return ""
     
-    async def _extract_entities(self, text: str) -> dict:
-        """Extract entities and relationships from the conversation."""
+    async def _extract_user_facts(self, user_text: str, assistant_text: str) -> dict:
+        """Extract entities and relationships from what the user said."""
         llm = await self._get_llm()
-        
+
         try:
             response = await llm.generate(
-                prompt=ENTITY_EXTRACTION_PROMPT.format(text=text),
+                prompt=USER_EXTRACTION_PROMPT.format(
+                    user_text=user_text,
+                    assistant_text=assistant_text
+                ),
                 model=self.model,
             )
             return self._parse_json(response)
         except Exception as e:
             import traceback
-            print(f"[Observer] Entity extraction error: {type(e).__name__}: {e}")
+            print(f"[Observer] User fact extraction error: {type(e).__name__}: {e}")
+            traceback.print_exc()
+            return {"entities": [], "relationships": []}
+
+    async def _extract_assistant_actions(self, assistant_text: str, user_text: str) -> dict:
+        """Extract what actions the assistant performed (recommendations, explanations, etc.)."""
+        llm = await self._get_llm()
+
+        try:
+            response = await llm.generate(
+                prompt=ASSISTANT_EXTRACTION_PROMPT.format(
+                    assistant_text=assistant_text,
+                    user_text=user_text
+                ),
+                model=self.model,
+            )
+            return self._parse_json(response)
+        except Exception as e:
+            import traceback
+            print(f"[Observer] Assistant action extraction error: {type(e).__name__}: {e}")
             traceback.print_exc()
             return {"entities": [], "relationships": []}
     
@@ -251,21 +290,34 @@ class Observer:
                 return []
             return {"entities": [], "relationships": []}
     
-    async def _store_in_graph(self, entities_data: dict):
-        """Store extracted entities and relationships in the graph."""
+    async def _store_in_graph(self, entities_data: dict, source: str = "USER"):
+        """Store extracted entities and relationships in the graph.
+
+        Args:
+            entities_data: Dict with 'entities' and 'relationships' lists
+            source: Attribution source - "USER" or "ASSISTANT"
+        """
         if not self.graph_store:
             return
-        
-        print(f"\n[Observer DEBUG] Entities data: {entities_data}")
-        
+
+        print(f"\n[Observer DEBUG] Entities data (source={source}): {entities_data}")
+
         try:
+            # Ensure ASSISTANT node exists if storing assistant actions
+            if source == "ASSISTANT":
+                self.graph_store.get_or_create_assistant_node()
+
             # Store entities
             for entity in entities_data.get("entities", []):
                 entity_type = entity.get("type", "Concept")
                 entity_name = entity.get("name")
-                
+
+                # Skip the ASSISTANT entity - it's created separately
+                if entity_name == "ASSISTANT":
+                    continue
+
                 print(f"[Observer DEBUG] Processing entity: {entity_name} (type: {entity_type})")
-                
+
                 if entity_type == "Person":
                     self.graph_store.add_person(
                         name=entity["name"],
@@ -288,47 +340,49 @@ class Observer:
                         attributes=entity.get("attributes")
                     )
                     print(f"[Observer DEBUG] Added Entity: {entity_name} ({category_map.get(entity_type, 'concept')})")
-            
+
             # Store relationships with contradiction detection
             for rel in entities_data.get("relationships", []):
                 subject = rel.get("subject")
                 predicate = rel.get("predicate")
                 obj = rel.get("object")
-                
-                print(f"[Observer DEBUG] Processing relationship: {subject} -{predicate}-> {obj}")
-                
+
+                print(f"[Observer DEBUG] Processing relationship: {subject} -{predicate}-> {obj} (source={source})")
+
                 if not (subject and predicate and obj):
                     print(f"[Observer DEBUG] Skipping incomplete relationship")
                     continue
-                
-                # Check for contradictions
-                contradictions = self.graph_store.check_contradictions(
-                    subject=subject,
-                    predicate=predicate,
-                    new_object=obj
-                )
-                
-                if contradictions:
-                    print(f"[Observer DEBUG] Found contradictions: {contradictions}")
-                
-                # Supersede old relationships if contradictions found
-                for contradiction in contradictions:
-                    print(f"[Observer DEBUG] Superseding: {subject} -{predicate}-> {contradiction['existing_object']}")
-                    self.graph_store.supersede_relationship(
+
+                # Check for contradictions (only for USER facts, not assistant actions)
+                if source == "USER":
+                    contradictions = self.graph_store.check_contradictions(
                         subject=subject,
                         predicate=predicate,
-                        old_object=contradiction["existing_object"]
+                        new_object=obj
                     )
-                
-                # Add new relationship
+
+                    if contradictions:
+                        print(f"[Observer DEBUG] Found contradictions: {contradictions}")
+
+                    # Supersede old relationships if contradictions found
+                    for contradiction in contradictions:
+                        print(f"[Observer DEBUG] Superseding: {subject} -{predicate}-> {contradiction['existing_object']}")
+                        self.graph_store.supersede_relationship(
+                            subject=subject,
+                            predicate=predicate,
+                            old_object=contradiction["existing_object"]
+                        )
+
+                # Add new relationship with source attribution
                 success = self.graph_store.add_relationship(
                     subject=subject,
                     predicate=predicate,
                     object_name=obj,
-                    metadata=rel.get("metadata", {})
+                    metadata=rel.get("metadata", {}),
+                    source=source
                 )
                 print(f"[Observer DEBUG] Added relationship: {success}")
-        
+
         except Exception as e:
             print(f"[Observer] Error storing in graph: {e}")
             import traceback

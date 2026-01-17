@@ -139,17 +139,19 @@ class GraphStore:
         subject: str,
         predicate: str,
         object_name: str,
-        metadata: dict | None = None
+        metadata: dict | None = None,
+        source: str = "USER"
     ) -> bool:
         """
         Add a relationship between entities.
-        
+
         Args:
             subject: Subject entity/person name
             predicate: Relationship type (e.g., "WORKS_AT", "KNOWS", "OWNS")
             object_name: Object entity/person name
             metadata: Additional relationship properties
-            
+            source: Attribution source - "USER" or "ASSISTANT"
+
         Returns:
             True if successful
         """
@@ -157,6 +159,7 @@ class GraphStore:
         metadata = metadata or {}
         metadata["created_at"] = now
         metadata["still_valid"] = True
+        metadata["source"] = source
         
         # Build properties string for Cypher
         props_str = ", ".join(f"r.{k} = ${k}" for k in metadata.keys())
@@ -292,16 +295,101 @@ class GraphStore:
         ON CREATE SET u.id = $id, u.name = "User", u.first_mentioned = $now
         RETURN u.id as id, u.name as name
         """
-        
+
         result = self.graph.query(
             query,
             {"id": str(uuid.uuid4()), "now": datetime.now().isoformat()}
         )
-        
+
         if result.result_set:
             return {"id": result.result_set[0][0], "name": result.result_set[0][1]}
         return None
-    
+
+    def get_or_create_assistant_node(self) -> str:
+        """
+        Get or create the ASSISTANT entity node.
+
+        Returns:
+            The ASSISTANT node ID
+        """
+        assistant_id = str(uuid.uuid4())
+        now = datetime.now().isoformat()
+
+        query = """
+        MERGE (a:Entity:Assistant {name: "ASSISTANT"})
+        ON CREATE SET
+            a.id = $id,
+            a.category = "assistant",
+            a.first_mentioned = $now,
+            a.last_mentioned = $now
+        ON MATCH SET
+            a.last_mentioned = $now
+        RETURN a.id as id
+        """
+
+        result = self.graph.query(
+            query,
+            {"id": assistant_id, "now": now}
+        )
+
+        if result.result_set:
+            return result.result_set[0][0]
+        return assistant_id
+
+    def query_assistant_actions(
+        self,
+        topic: str | None = None,
+        limit: int = 5
+    ) -> list[dict]:
+        """
+        Query past assistant actions (recommendations, explanations, etc.).
+
+        Args:
+            topic: Optional topic to filter by (matches against object name)
+            limit: Maximum number of actions to return
+
+        Returns:
+            List of assistant actions with action type, target, and metadata
+        """
+        if topic:
+            # Search for actions related to a specific topic
+            query = """
+            MATCH (a:Assistant {name: "ASSISTANT"})-[r]->(o)
+            WHERE r.still_valid = true AND toLower(o.name) CONTAINS toLower($topic)
+            RETURN type(r) as action, o.name as target, properties(r) as metadata, o.category as category
+            ORDER BY r.created_at DESC
+            LIMIT $limit
+            """
+            params = {"topic": topic, "limit": limit}
+        else:
+            # Get all recent assistant actions
+            query = """
+            MATCH (a:Assistant {name: "ASSISTANT"})-[r]->(o)
+            WHERE r.still_valid = true
+            RETURN type(r) as action, o.name as target, properties(r) as metadata, o.category as category
+            ORDER BY r.created_at DESC
+            LIMIT $limit
+            """
+            params = {"limit": limit}
+
+        try:
+            result = self.graph.query(query, params)
+
+            actions = []
+            if result.result_set:
+                for row in result.result_set:
+                    actions.append({
+                        "action": row[0],
+                        "target": row[1],
+                        "metadata": row[2],
+                        "category": row[3]
+                    })
+
+            return actions
+        except Exception as e:
+            print(f"[GraphStore] Error querying assistant actions: {e}")
+            return []
+
     def close(self):
         """Close the connection."""
         # FalkorDB client doesn't require explicit closing

@@ -47,10 +47,11 @@ class ContextAssembler:
         1. Sliding window of recent conversation
         2. Vector similarity search of past memories
         3. Graph entity facts (if available)
+        4. Previous assistant actions (if available)
         """
         # Step 1: Get sliding window (most recent turns)
         sliding_context = self._get_sliding_window(conversation_history)
-        
+
         # Step 2: Search vector store for relevant memories
         # If reranker available, get more candidates for reranking
         search_k = self.vector_candidates_k if self.reranker else self.vector_search_top_k
@@ -58,21 +59,23 @@ class ContextAssembler:
             query=query,
             top_k=search_k,
         )
-        
+
         # Step 2.5: Rerank results if reranker is available (Phase 4)
         if self.reranker and vector_results:
             vector_results = self._rerank_results(query, vector_results)
-        
+
         # Step 3: Query graph for entity facts (if graph store available)
         graph_facts = ""
+        assistant_context = ""
         if self.graph_store:
             graph_facts = self._query_graph_facts(query)
-        
+            assistant_context = self._query_assistant_context(query)
+
         # Step 4: Format memories
         memory_context = self._format_memories(vector_results)
-        
+
         # Step 5: Combine
-        return self._build_final_context(sliding_context, memory_context, graph_facts)
+        return self._build_final_context(sliding_context, memory_context, graph_facts, assistant_context)
     
     def _get_sliding_window(self, history: list[dict]) -> str:
         """Get the most recent conversation turns."""
@@ -145,56 +148,111 @@ class ContextAssembler:
         """Query graph for facts about entities mentioned in query."""
         if not self.graph_store:
             return ""
-        
+
         # Simple entity extraction from query (look for capitalized words)
         import re
         words = query.split()
         potential_entities = [w.strip(',.?!') for w in words if w[0].isupper() and len(w) > 1]
-        
+
         if not potential_entities:
             return ""
-        
+
         facts_lines = []
         seen_entities = set()
-        
+
         for entity in potential_entities:
             if entity in seen_entities:
                 continue
             seen_entities.add(entity)
-            
+
             # Query graph for facts about this entity
             facts = self.graph_store.query_entity_facts(entity, limit=3)
-            
+
             if facts:
                 facts_lines.append(f"**{entity}:**")
                 for fact in facts:
                     rel = fact.get("relationship", "")
                     related = fact.get("related_entity", "")
                     facts_lines.append(f"  - {rel}: {related}")
-        
+
         return "\n".join(facts_lines) if facts_lines else ""
-    
-    def _build_final_context(self, sliding: str, memories: str, graph_facts: str = "") -> str:
-        """Combine sliding window, memories, and graph facts with temporal priority."""
+
+    def _query_assistant_context(self, query: str) -> str:
+        """Query past assistant actions relevant to the current query."""
+        if not self.graph_store:
+            return ""
+
+        # Extract potential topics from query
+        words = query.lower().split()
+        # Common topic keywords to look for
+        topic_keywords = [w.strip(',.?!') for w in words if len(w) > 3]
+
+        actions_lines = []
+        seen_targets = set()
+
+        # First, get recent assistant actions without topic filter
+        all_actions = self.graph_store.query_assistant_actions(limit=5)
+
+        for action in all_actions:
+            target = action.get("target", "")
+            if target in seen_targets:
+                continue
+            seen_targets.add(target)
+
+            action_type = action.get("action", "")
+            metadata = action.get("metadata", {})
+
+            # Format the action
+            if action_type == "RECOMMENDED":
+                reason = metadata.get("reason", "")
+                if reason:
+                    actions_lines.append(f"- RECOMMENDED: {target} (for {reason})")
+                else:
+                    actions_lines.append(f"- RECOMMENDED: {target}")
+            elif action_type == "SUGGESTED":
+                purpose = metadata.get("purpose", "")
+                if purpose:
+                    actions_lines.append(f"- SUGGESTED: {target} ({purpose})")
+                else:
+                    actions_lines.append(f"- SUGGESTED: {target}")
+            elif action_type == "EXPLAINED":
+                actions_lines.append(f"- EXPLAINED: {target}")
+            elif action_type == "ASKED_ABOUT":
+                actions_lines.append(f"- ASKED_ABOUT: {target}")
+            elif action_type == "OFFERED":
+                actions_lines.append(f"- OFFERED: {target}")
+            else:
+                actions_lines.append(f"- {action_type}: {target}")
+
+        return "\n".join(actions_lines) if actions_lines else ""
+
+    def _build_final_context(self, sliding: str, memories: str, graph_facts: str = "", assistant_context: str = "") -> str:
+        """Combine sliding window, memories, graph facts, and assistant history with temporal priority."""
         parts = []
-        
+
         # Priority 1: Graph facts (current truth)
         if graph_facts:
             parts.append("## Current Facts (Knowledge Graph)")
             parts.append(graph_facts)
             parts.append("")
-        
-        # Priority 2: Recent memories (temporally weighted)
+
+        # Priority 2: Previous Assistant Actions (avoid repetition)
+        if assistant_context:
+            parts.append("## Previous Assistant Actions")
+            parts.append(assistant_context)
+            parts.append("")
+
+        # Priority 3: Recent memories (temporally weighted)
         if memories:
             parts.append("## Past Conversations (Recent First)")
             parts.append(memories)
             parts.append("")
-        
-        # Priority 3: Sliding window (immediate context)
+
+        # Priority 4: Sliding window (immediate context)
         if sliding:
             parts.append("## Current Conversation")
             parts.append(sliding)
-        
+
         return "\n".join(parts)
     
     def _rerank_results(self, query: str, results: list[dict]) -> list[dict]:
