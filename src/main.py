@@ -248,7 +248,7 @@ class LCRAssistant:
                 
                 # Stream response
                 self.console.print()
-                self.console.print("[bold blue]Assistant[/bold blue]")
+                self.console.print("[bold blue]Assistant:[/bold blue] ", end="")
                 
                 response_text = ""
                 async for chunk in self.chat_stream(user_input):
