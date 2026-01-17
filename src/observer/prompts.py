@@ -9,7 +9,7 @@ Rules:
 - DISCARD: Greetings, thanks, acknowledgments, small talk with no personal information
 - LOW: General discussion but no concrete facts about the user
 - MEDIUM: Contains user preferences, opinions, or feelings  
-- HIGH: Contains facts (schedules, relationships, owned items, work info, names)
+- HIGH: Contains facts (schedules, relationships, family, romantic partners, breakups, life events, owned items, work info, names)
 
 Respond with exactly one word: DISCARD, LOW, MEDIUM, or HIGH"""
 
@@ -34,8 +34,17 @@ RELATIONSHIP TYPES:
 Ownership & Possession:
 - OWNS, RECEIVED_FROM
 
+Family:
+- SIBLING_OF, PARENT_OF, CHILD_OF, GRANDPARENT_OF, GRANDCHILD_OF
+- RELATIVE_OF (for extended family: aunt, uncle, cousin)
+
+Romantic:
+- DATING, ENGAGED_TO, MARRIED_TO
+- EX_PARTNER_OF (former romantic relationship)
+- BROKE_UP_WITH (when breakup timing is mentioned)
+
 Social & Professional:
-- KNOWS, WORKS_AT, MARRIED_TO, COWORKER_OF, FRIENDS_WITH, FAN_OF
+- KNOWS, WORKS_AT, COWORKER_OF, FRIENDS_WITH, FAN_OF
 
 Location & Spatial:
 - LIVES_IN, LOCATED_AT
@@ -69,6 +78,16 @@ EXTRACTION RULES:
 3. Include temporal context in metadata when mentioned (timeframe, reason, purpose)
 4. Do NOT use generic types as names (e.g., use "Mom" instead of "Person", "Philadelphia" instead of "Place")
 5. Return empty arrays if nothing found
+6. CRITICAL: Only extract facts stated by the USER (lines starting with USER:). Do NOT extract:
+   - Suggestions, recommendations, or information provided by the ASSISTANT
+   - Hypotheticals or examples given by the ASSISTANT
+   - Places, restaurants, or entities that only appear in ASSISTANT responses
+7. Attribution: The USER is always the subject of their own feelings.
+   - "I feel upset about X" -> USER -FEELS_ABOUT-> X
+   - Do NOT reverse the subject
+8. Temporal metadata: Capture duration and timing when mentioned.
+   - "6-year relationship" -> metadata: {{"duration": "6 years"}}
+   - "broke up last week" -> metadata: {{"when": "last week"}}
 
 EXAMPLES:
 
@@ -102,7 +121,7 @@ Output:
   ]
 }}
 
-Example 2 - State transition:
+Example 3 - State transition:
 Input: "My iPhone was broken but I just got it repaired"
 Output:
 {{
@@ -116,6 +135,56 @@ Output:
     {{"subject": "iPhone", "predicate": "IN_STATE", "object": "repaired", "metadata": {{"timeframe": "current"}}}}
   ]
 }}
+
+Example 4 - Family with explicit relationships:
+Input: "My brother Sam loves 3D printing. My sister Justine is visiting."
+Output:
+{{
+  "entities": [
+    {{"name": "USER", "type": "Person", "attributes": {{}}}},
+    {{"name": "Sam", "type": "Person", "attributes": {{}}}},
+    {{"name": "Justine", "type": "Person", "attributes": {{}}}},
+    {{"name": "3D printing", "type": "Technology", "attributes": {{}}}}
+  ],
+  "relationships": [
+    {{"subject": "Sam", "predicate": "SIBLING_OF", "object": "USER", "metadata": {{"type": "brother"}}}},
+    {{"subject": "Justine", "predicate": "SIBLING_OF", "object": "USER", "metadata": {{"type": "sister"}}}},
+    {{"subject": "Sam", "predicate": "FAN_OF", "object": "3D printing", "metadata": {{}}}}
+  ]
+}}
+
+Example 5 - Breakup scenario:
+Input: "I'm sad about my ex-girlfriend Giana. We broke up last week after 6 years."
+Output:
+{{
+  "entities": [
+    {{"name": "USER", "type": "Person", "attributes": {{}}}},
+    {{"name": "Giana", "type": "Person", "attributes": {{}}}}
+  ],
+  "relationships": [
+    {{"subject": "USER", "predicate": "EX_PARTNER_OF", "object": "Giana", "metadata": {{"duration": "6 years"}}}},
+    {{"subject": "USER", "predicate": "BROKE_UP_WITH", "object": "Giana", "metadata": {{"when": "last week"}}}},
+    {{"subject": "USER", "predicate": "FEELS_ABOUT", "object": "breakup with Giana", "metadata": {{"emotion": "sad"}}}}
+  ]
+}}
+
+COMMON ERRORS TO AVOID:
+
+ERROR 1 - Wrong predicate for ex-partners:
+BAD:  Giana -FRIENDS_WITH-> USER
+GOOD: USER -EX_PARTNER_OF-> Giana
+
+ERROR 2 - Reversed attribution:
+BAD:  Giana -FEELS_ABOUT-> breaking up
+GOOD: USER -FEELS_ABOUT-> breakup with Giana
+
+ERROR 3 - Extracting assistant suggestions:
+BAD:  Bella Vita -LOCATED_AT-> South Philly (from assistant recommendation)
+GOOD: (do not extract - not a user fact)
+
+ERROR 4 - Inventing predicates:
+BAD:  USER -SOMEONE_REPRESENTING-> Justine
+GOOD: Justine -SIBLING_OF-> USER
 """
 
 

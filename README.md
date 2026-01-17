@@ -2,8 +2,8 @@
 
 A privacy-first conversational AI assistant with persistent episodic memory. Runs entirely locally without external API dependencies.
 
-**Current Version:** v0.4.2  
-**Status:** Text-based chat interface with vector memory, asynchronous background processing, streaming output, graph-based entity tracking with contradiction resolution, and cross-encoder reranking for improved memory relevance.
+**Current Version:** v0.4.3
+**Status:** Text-based chat interface with vector memory, asynchronous background processing, streaming output, graph-based entity tracking with contradiction resolution, cross-encoder reranking, and improved entity extraction for family/romantic relationships.
 
 ---
 
@@ -44,7 +44,7 @@ Assistant: You need to leave by 8:30. Your shift at Acme starts at 9, and with
 ```bash
 # Install required Ollama models
 ollama pull qwen3:14b
-ollama pull qwen2.5:1.5b
+ollama pull qwen3:1.7b
 ollama pull nomic-embed-text
 
 # Clone repository and install dependencies
@@ -87,7 +87,7 @@ Conversation data is automatically persisted. Subsequent sessions will have acce
 | Component | Technology | Purpose |
 |-----------|------------|---------|
 | Main LLM | Qwen3 14B | Conversation generation |
-| Observer LLM | Qwen2.5 1.5B | Background memory extraction |
+| Observer LLM | Qwen3 1.7B | Background memory extraction |
 | Vector Store | LanceDB | Semantic memory storage |
 | Graph Store | FalkorDB | Entity-relationship tracking |
 | Reranker | BGE-Reranker-v2-m3 | Relevance scoring |
@@ -102,6 +102,8 @@ lcr/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
 ├── docker-compose.yml           # FalkorDB configuration
+├── tests/                       # Test suite
+│   └── test_observer_quality.py # Observer extraction tests
 ├── src/
 │   ├── main.py                 # CLI entry point
 │   ├── config.py               # Configuration management
@@ -132,7 +134,7 @@ Create `.env` from `.env.template` to customize settings:
 |----------|---------|-------------|
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama API endpoint |
 | `MAIN_MODEL` | `qwen3:14b` | Primary conversation model |
-| `OBSERVER_MODEL` | `qwen2.5:1.5b` | Background extraction model |
+| `OBSERVER_MODEL` | `qwen3:1.7b` | Background extraction model |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding generation model |
 | `LANCEDB_PATH` | `./data/lancedb` | Vector storage location |
 | `VECTOR_SEARCH_TOP_K` | `5` | Number of memories to retrieve |
@@ -155,7 +157,7 @@ MAIN_MODEL=qwen3:8b
 
 ## Current Status
 
-### Implemented Features (v0.4.2)
+### Implemented Features (v0.4.3)
 
 - Vector-based memory storage with LanceDB
 - Graph-based entity and relationship tracking with FalkorDB
@@ -165,6 +167,8 @@ MAIN_MODEL=qwen3:8b
 - Contradiction detection and resolution
 - Streaming token-by-token output
 - CLI interface with conversation persistence
+- Family and romantic relationship extraction (SIBLING_OF, EX_PARTNER_OF, etc.)
+- Improved extraction rules for attribution and temporal metadata
 
 ### Known Limitations
 
@@ -183,6 +187,7 @@ MAIN_MODEL=qwen3:8b
 - Phase 3.1: Temporal relationship extraction
 - Phase 4: Cross-encoder reranking
 - Phase 4.1: Observer CPU optimization
+- Phase 4.2: Observer extraction quality improvements
 
 ### Planned Phases
 - Voice interface (Whisper STT + Piper TTS)

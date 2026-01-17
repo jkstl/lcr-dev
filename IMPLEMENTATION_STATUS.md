@@ -1,29 +1,8 @@
 # LCR Implementation Status
 
-> **Last Updated**: 2026-01-17  
-> **Current Version**: v0.4.1  
+> **Last Updated**: 2026-01-17
+> **Current Version**: v0.4.3
 > **Repository**: https://github.com/jkstl/lcr-dev
-
----
-
-## 🚨 CURRENT BLOCKING ISSUE
-
-### Observer CPU Offloading Failure
-
-**Status**: RESOLVED (v0.4.2)
-**Priority**: Normal
-
-The Observer component previously failed when running on CPU (`num_gpu=0`) due to Ollama hanging when receiving concurrent requests.
- 
-**Resolution**:
-- **Sequential Execution**: Modified `src/observer/observer.py` to execute extraction tasks sequentially instead of in parallel.
-- **Model Optimization**: Default Observer model switched to `qwen3:0.6b` for lightweight CPU performance.
-- **Enhanced Logging**: Added detailed error logging to `src/models/llm.py`.
- 
-**Verification**:
-- Validated with `reproduce_issue.py` (now deleted).
-- Confirmed stable execution on CPU.
-
 
 ---
 
@@ -60,11 +39,22 @@ The Observer component previously failed when running on CPU (`num_gpu=0`) due t
 - [x] GPU/CPU auto-detection with fallback
 - [x] Added `sentence-transformers` dependency
 
-### Phase 4.1: Observer Model Separation (v0.4.1) - IN PROGRESS
-- [x] Added `observer_model` config setting (qwen3:4b)
+### Phase 4.1: Observer Model Separation (v0.4.1)
+- [x] Added `observer_model` config setting
 - [x] Added `num_gpu` parameter to OllamaClient
 - [x] Observer uses CPU offloading (`num_gpu=0`)
-- [ ] **BLOCKED**: Observer fails silently on CPU (see above)
+- [x] Sequential execution to prevent Ollama hangs
+
+### Phase 4.2: Observer Extraction Quality (v0.4.3)
+- [x] Added Family predicates (SIBLING_OF, PARENT_OF, CHILD_OF, etc.)
+- [x] Added Romantic predicates (EX_PARTNER_OF, BROKE_UP_WITH, DATING, etc.)
+- [x] Added extraction rules for user-only facts (Rule 6)
+- [x] Added attribution rules (USER as subject of FEELS_ABOUT)
+- [x] Added temporal metadata capture (duration, when)
+- [x] Added few-shot examples for family and breakup scenarios
+- [x] Added anti-pattern section to prevent common extraction errors
+- [x] Upgraded Observer model to qwen3:1.7b
+- [x] Created test suite (`tests/test_observer_quality.py`)
 
 ---
 
@@ -83,7 +73,7 @@ The Observer component previously failed when running on CPU (`num_gpu=0`) due t
 |-----------|--------|----------|
 | Main LLM (qwen3:14b) | GPU | ~10GB VRAM |
 | Reranker (BGE-v2-m3) | GPU | ~2.1GB VRAM |
-| Observer (qwen3:4b) | **CPU** | ~3GB RAM |
+| Observer (qwen3:1.7b) | **CPU** | ~1.5GB RAM |
 | LanceDB | CPU | RAM cache |
 | FalkorDB | Docker | Disk + RAM |
 
@@ -99,6 +89,7 @@ The Observer component previously failed when running on CPU (`num_gpu=0`) due t
 | `src/memory/vector_store.py` | LanceDB operations |
 | `src/memory/graph_store.py` | FalkorDB operations |
 | `src/memory/context_assembler.py` | Retrieval + reranking |
+| `tests/test_observer_quality.py` | Observer extraction tests |
 
 ---
 
@@ -108,7 +99,8 @@ Before testing, ensure:
 ```bash
 # Required models
 ollama pull qwen3:14b
-ollama pull qwen3:4b
+ollama pull qwen3:1.7b
+ollama pull nomic-embed-text
 
 # Optional: FalkorDB for graph features
 docker compose up -d
@@ -118,6 +110,8 @@ pip install -r requirements.txt
 ```
 
 Run: `python -m src.main`
+
+Run tests: `python tests/test_observer_quality.py`
 
 ---
 
