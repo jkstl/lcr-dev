@@ -51,6 +51,7 @@ class LCRAssistant:
         self.conversation_id = str(uuid.uuid4())
         self.conversation_history: list[dict] = []
         self.turn_index = 0
+        self.background_tasks: set = set()  # Track async Observer tasks
         
         # Initialize components
         get_data_dir()  # Ensure directories exist
@@ -153,8 +154,10 @@ class LCRAssistant:
             "timestamp": datetime.now().isoformat(),
         })
         
-        # Store the turn in memory (fire-and-forget - don't block response)
-        asyncio.create_task(self._store_memory(user_input, response))
+        # Store the turn in memory (fire-and-forget - track task)
+        task = asyncio.create_task(self._store_memory(user_input, response))
+        self.background_tasks.add(task)
+        task.add_done_callback(self.background_tasks.discard)
         
         self.turn_index += 1
         return response
@@ -242,9 +245,10 @@ class LCRAssistant:
             log_path = self._save_conversation_log()
             self.console.print(f"\n[dim]Conversation saved to: {log_path}[/dim]")
             
-            # Wait for Observer to finish processing (background tasks)
-            self.console.print("[dim]Waiting for memory processing to complete...[/dim]")
-            await asyncio.sleep(5)
+            # Wait for all background Observer tasks to complete
+            if self.background_tasks:
+                self.console.print(f"[dim]Waiting for {len(self.background_tasks)} memory processing task(s) to complete...[/dim]")
+                await asyncio.gather(*self.background_tasks, return_exceptions=True)
             
             # Cleanup
             if self.llm:
