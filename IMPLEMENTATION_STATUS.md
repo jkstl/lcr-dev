@@ -41,9 +41,9 @@
 - Redis task queue
 
 ### 🐛 Known Issues
-1. **Observer Processing Delay**: Background tasks take 10-60s to complete. System waits at shutdown with message: `"Waiting for X memory processing task(s) to complete..."`
+1. **~~Observer Processing Delay~~**: ✅ **Improved** - Observer now uses smaller `qwen3:4b` model (configurable via `observer_model` setting) instead of main 14B model, significantly reducing processing time.
 2. **Docker Setup**: FalkorDB requires Docker Compose V2 (`/usr/local/bin/docker-compose` on Ubuntu 24.04 due to distutils compatibility)
-3. **Model**: Currently uses `qwen3:14b` (newer than spec's `qwen2.5:14b`)
+3. **Model**: Main LLM uses `qwen3:14b`, Observer uses `qwen3:4b`
 4. **~~Entity Extraction Limitations~~**: ✅ **FIXED** (v0.3.1) - Observer now extracts temporal intent/state relationships (PLANS_TO, CURRENTLY_USING_AS, IN_STATE, etc.) in addition to ownership. Contradiction detection now works for intent changes like "planning to sell" → "using as home server". Enhanced extraction prompt includes temporal relationship types and metadata guidance.
 5. **Graph Contradiction Detection**: Requires FalkorDB to be running via Docker. Without it, Observer still extracts entities/relationships but cannot detect contradictions or persist to graph store.
 

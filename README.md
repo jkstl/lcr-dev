@@ -47,7 +47,7 @@ python -m src.main
 
 ## Known Issues
 
-> **⚠️ Observer Processing Delay:** The Observer processes memories in the background. When you type `exit`, the system will wait for all processing tasks to complete before closing. This may take 10-60 seconds depending on conversation complexity.
+> **~~Observer Processing Delay~~** ✅ **Improved:** The Observer now uses a smaller `qwen3:4b` model (configurable via `observer_model` setting) instead of the main 14B model, significantly reducing background processing time from 10-60s to ~3-15s.
 
 > **~~Entity Extraction Limitations~~** ✅ **FIXED in v0.3.1:** The Observer now successfully extracts temporal intent and state changes (e.g., "plans to sell" → "using as home server") in addition to ownership relationships. Enhanced extraction prompt includes relationship types like PLANS_TO, CURRENTLY_USING_AS, IN_STATE, etc. Contradiction detection now works for all relationship types.
 

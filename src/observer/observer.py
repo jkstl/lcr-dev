@@ -67,12 +67,12 @@ class Observer:
         Initialize the Observer.
         
         Args:
-            model: Model to use for extraction (defaults to main model for now,
-                   ideally would be a smaller model like phi3.5)
+            model: Model to use for extraction (defaults to observer_model, 
+                   a smaller model like qwen3:4b for faster processing)
             ollama_host: Ollama API host
             graph_store: Optional GraphStore instance for entity tracking
         """
-        self.model = model or settings.main_model
+        self.model = model or settings.observer_model
         self.host = ollama_host or settings.ollama_host
         self._llm: OllamaClient | None = None
         self.graph_store = graph_store

@@ -57,6 +57,12 @@ Preferences & Feelings:
 Scheduling:
 - SCHEDULED
 
+For relationships not covered above (e.g., infrastructure, technical systems):
+- Use RELATED_TO with relationship_type in metadata
+- Example: {{"subject": "Server1", "predicate": "RELATED_TO", "object": "Router1", 
+           "metadata": {{"relationship_type": "connected_to", "port": "eth0"}}}}
+- Common technical types: connected_to, depends_on, routes_to, listens_on, proxies_to, backs_up_to
+
 EXTRACTION RULES:
 1. Extract ONLY what is explicitly stated - do not infer
 2. For temporal changes (was/now/planning), create SEPARATE relationships for each state

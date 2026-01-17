@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # LLM Settings
     ollama_host: str = "http://localhost:11434"
     main_model: str = "qwen3:14b"
+    observer_model: str = "qwen3:4b"  # Smaller model for Observer tasks
     embedding_model: str = "nomic-embed-text"
     
     # Database Paths
