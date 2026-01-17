@@ -242,6 +242,10 @@ class LCRAssistant:
             log_path = self._save_conversation_log()
             self.console.print(f"\n[dim]Conversation saved to: {log_path}[/dim]")
             
+            # Wait for Observer to finish processing (background tasks)
+            self.console.print("[dim]Waiting for memory processing to complete...[/dim]")
+            await asyncio.sleep(5)
+            
             # Cleanup
             if self.llm:
                 await self.llm.close()
