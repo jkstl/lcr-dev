@@ -8,11 +8,12 @@ from src.config import settings
 class OllamaClient:
     """Async client for Ollama API."""
     
-    def __init__(self, host: str | None = None, model: str | None = None):
+    def __init__(self, host: str | None = None, model: str | None = None, num_gpu: int | None = None):
         self.host = host or settings.ollama_host
         self.model = model or settings.main_model
         # Increased timeout for model swapping scenarios (main ↔ observer models)
         self._client = httpx.AsyncClient(base_url=self.host, timeout=300.0)
+        self._num_gpu = num_gpu  # None = default (GPU), 0 = CPU only
     
     async def generate(
         self,
@@ -30,6 +31,10 @@ class OllamaClient:
         }
         if system:
             payload["system"] = system
+        
+        # Add options for CPU offloading if specified
+        if self._num_gpu is not None:
+            payload["options"] = {"num_gpu": self._num_gpu}
         
         response = await self._client.post("/api/generate", json=payload)
         response.raise_for_status()

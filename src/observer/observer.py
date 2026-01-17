@@ -80,7 +80,8 @@ class Observer:
     async def _get_llm(self) -> OllamaClient:
         """Lazy initialize LLM client."""
         if self._llm is None:
-            self._llm = OllamaClient(host=self.host, model=self.model)
+            # Use num_gpu=0 to run Observer on CPU, freeing VRAM for main LLM
+            self._llm = OllamaClient(host=self.host, model=self.model, num_gpu=0)
         return self._llm
     
     async def process_turn(
