@@ -67,11 +67,27 @@ EXTRACTION RULES:
 1. Extract ONLY what is explicitly stated - do not infer
 2. For temporal changes (was/now/planning), create SEPARATE relationships for each state
 3. Include temporal context in metadata when mentioned (timeframe, reason, purpose)
-4. Return empty arrays if nothing found
+4. Do NOT use generic types as names (e.g., use "Mom" instead of "Person", "Philadelphia" instead of "Place")
+5. Return empty arrays if nothing found
 
 EXAMPLES:
 
-Example 1 - Temporal intent change:
+Example 1 - Family members:
+Input: "My mom and sister are visiting from Boston"
+Output:
+{{
+  "entities": [
+    {{"name": "Mom", "type": "Person", "attributes": {{"relationship": "mother"}}}},
+    {{"name": "Sister", "type": "Person", "attributes": {{"relationship": "sister"}}}},
+    {{"name": "Boston", "type": "Place", "attributes": {{}}}}
+  ],
+  "relationships": [
+    {{"subject": "Mom", "predicate": "LOCATED_AT", "object": "Boston", "metadata": {{"timeframe": "from"}}}},
+    {{"subject": "Sister", "predicate": "LOCATED_AT", "object": "Boston", "metadata": {{"timeframe": "from"}}}}
+  ]
+}}
+
+Example 2 - Temporal intent change:
 Input: "I was planning to sell my Dell laptop but now I'm using it as a home server"
 Output:
 {{

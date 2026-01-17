@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     # LLM Settings
     ollama_host: str = "http://localhost:11434"
     main_model: str = "qwen3:14b"
-    observer_model: str = "qwen3:0.6b"  # Lightweight model for CPU offloading
+    observer_model: str = "qwen2.5:1.5b"  # 1.5B model for better extraction quality
     embedding_model: str = "nomic-embed-text"
     
     # Database Paths
