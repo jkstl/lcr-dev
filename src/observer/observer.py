@@ -250,10 +250,15 @@ class Observer:
         if not self.graph_store:
             return
         
+        print(f"\n[Observer DEBUG] Entities data: {entities_data}")
+        
         try:
             # Store entities
             for entity in entities_data.get("entities", []):
                 entity_type = entity.get("type", "Concept")
+                entity_name = entity.get("name")
+                
+                print(f"[Observer DEBUG] Processing entity: {entity_name} (type: {entity_type})")
                 
                 if entity_type == "Person":
                     self.graph_store.add_person(
@@ -261,6 +266,7 @@ class Observer:
                         relationship_to_user=entity.get("attributes", {}).get("relationship", "unknown"),
                         attributes=entity.get("attributes")
                     )
+                    print(f"[Observer DEBUG] Added Person: {entity_name}")
                 else:
                     # Map entity types to categories
                     category_map = {
@@ -275,6 +281,7 @@ class Observer:
                         category=category_map.get(entity_type, "concept"),
                         attributes=entity.get("attributes")
                     )
+                    print(f"[Observer DEBUG] Added Entity: {entity_name} ({category_map.get(entity_type, 'concept')})")
             
             # Store relationships with contradiction detection
             for rel in entities_data.get("relationships", []):
@@ -282,7 +289,10 @@ class Observer:
                 predicate = rel.get("predicate")
                 obj = rel.get("object")
                 
+                print(f"[Observer DEBUG] Processing relationship: {subject} -{predicate}-> {obj}")
+                
                 if not (subject and predicate and obj):
+                    print(f"[Observer DEBUG] Skipping incomplete relationship")
                     continue
                 
                 # Check for contradictions
@@ -292,8 +302,12 @@ class Observer:
                     new_object=obj
                 )
                 
+                if contradictions:
+                    print(f"[Observer DEBUG] Found contradictions: {contradictions}")
+                
                 # Supersede old relationships if contradictions found
                 for contradiction in contradictions:
+                    print(f"[Observer DEBUG] Superseding: {subject} -{predicate}-> {contradiction['existing_object']}")
                     self.graph_store.supersede_relationship(
                         subject=subject,
                         predicate=predicate,
@@ -301,15 +315,18 @@ class Observer:
                     )
                 
                 # Add new relationship
-                self.graph_store.add_relationship(
+                success = self.graph_store.add_relationship(
                     subject=subject,
                     predicate=predicate,
                     object_name=obj,
                     metadata=rel.get("metadata", {})
                 )
+                print(f"[Observer DEBUG] Added relationship: {success}")
         
         except Exception as e:
             print(f"[Observer] Error storing in graph: {e}")
+            import traceback
+            traceback.print_exc()
     
     async def close(self):
         """Clean up resources."""
