@@ -256,7 +256,7 @@ class Observer:
         """Parse JSON from LLM response, handling common issues."""
         # Try to find JSON in the response
         text = text.strip()
-        
+
         # Handle markdown code blocks
         if "```json" in text:
             match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
@@ -266,11 +266,11 @@ class Observer:
             match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
             if match:
                 text = match.group(1)
-        
+
         # Try to find JSON object or array
         start_obj = text.find("{")
         start_arr = text.find("[")
-        
+
         if start_obj != -1 and (start_arr == -1 or start_obj < start_arr):
             # Find matching closing brace
             end = text.rfind("}")
@@ -281,14 +281,67 @@ class Observer:
             end = text.rfind("]")
             if end != -1:
                 text = text[start_arr:end + 1]
-        
+
         try:
-            return json.loads(text)
+            data = json.loads(text)
+            return self._normalize_extraction(data)
         except json.JSONDecodeError:
             # Return empty structure on parse failure
             if "[" in text:
                 return []
             return {"entities": [], "relationships": []}
+
+    def _normalize_extraction(self, data: dict | list) -> dict | list:
+        """Normalize extraction data to handle schema variants from LLM."""
+        if isinstance(data, list):
+            return data
+
+        if not isinstance(data, dict):
+            return {"entities": [], "relationships": []}
+
+        # Normalize entities - convert dict format to list format
+        entities = data.get("entities", [])
+        if isinstance(entities, dict):
+            # Convert {"Mom": "Person", "Justine": "Person"} to [{"name": "Mom", "type": "Person"}, ...]
+            normalized_entities = []
+            for name, entity_type in entities.items():
+                if isinstance(entity_type, str):
+                    normalized_entities.append({"name": name, "type": entity_type, "attributes": {}})
+                elif isinstance(entity_type, dict):
+                    normalized_entities.append({"name": name, **entity_type})
+            entities = normalized_entities
+
+        # Normalize relationships
+        relationships = data.get("relationships", [])
+        if isinstance(relationships, dict):
+            # Convert weird dict format to list format
+            # e.g., {"SIBLING_OF": ["User", "Justine"]} -> [{"subject": "User", "predicate": "SIBLING_OF", "object": "Justine"}]
+            normalized_rels = []
+            for predicate, value in relationships.items():
+                if isinstance(value, list) and len(value) >= 2:
+                    normalized_rels.append({
+                        "subject": value[0],
+                        "predicate": predicate,
+                        "object": value[1],
+                        "metadata": {}
+                    })
+            relationships = normalized_rels
+        elif isinstance(relationships, list):
+            # Normalize each relationship - convert "relation" to "predicate"
+            normalized_rels = []
+            for rel in relationships:
+                if isinstance(rel, dict):
+                    normalized_rel = dict(rel)
+                    # Convert "relation" key to "predicate"
+                    if "relation" in normalized_rel and "predicate" not in normalized_rel:
+                        normalized_rel["predicate"] = normalized_rel.pop("relation")
+                    # Ensure metadata exists
+                    if "metadata" not in normalized_rel:
+                        normalized_rel["metadata"] = {}
+                    normalized_rels.append(normalized_rel)
+            relationships = normalized_rels
+
+        return {"entities": entities, "relationships": relationships}
     
     async def _store_in_graph(self, entities_data: dict, source: str = "USER"):
         """Store extracted entities and relationships in the graph.

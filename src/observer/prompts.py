@@ -22,15 +22,17 @@ USER MESSAGE:
 ASSISTANT RESPONSE (context only - do NOT extract from this):
 {assistant_text}
 
-Output valid JSON only:
+Output valid JSON only. Use EXACTLY this schema (entities as array, relationships with "predicate" key):
 {{
     "entities": [
         {{"name": "entity name", "type": "Person|Technology|Place|Organization|Event|Concept", "attributes": {{}}}}
     ],
     "relationships": [
-        {{"subject": "entity1", "predicate": "relationship type", "object": "entity2", "metadata": {{}}}}
+        {{"subject": "entity1", "predicate": "PREDICATE_NAME", "object": "entity2", "metadata": {{}}}}
     ]
 }}
+
+CRITICAL: Use "predicate" not "relation". Use arrays not dicts.
 
 RELATIONSHIP TYPES:
 
@@ -209,75 +211,93 @@ Output valid JSON only. The subject is ALWAYS "ASSISTANT":
     ]
 }}
 
-ASSISTANT ACTION PREDICATES:
+ASSISTANT ACTION PREDICATES (use ONLY these):
 
-- RECOMMENDED - suggested a restaurant, product, service, or specific action
-- SUGGESTED - proposed an approach, idea, or alternative
-- EXPLAINED - provided information, explanation, or clarification about a topic
-- ASKED_ABOUT - asked the user a clarifying question about something
-- OFFERED - offered to help with something specific
+- RECOMMENDED - suggested a specific restaurant, product, service, or concrete action to take
+- SUGGESTED - proposed a specific approach, solution, or alternative
+- EXPLAINED - provided factual/technical information the user asked about
+- ASKED_ABOUT - asked the user a specific clarifying question
+- OFFERED - offered to perform a specific task for the user
+
+WHAT IS NOT AN ACTION (return empty arrays for ALL of these):
+
+- Empathy: "I'm sorry to hear that", "That must be hard", "Breakups are never easy"
+- Acknowledgment: "That sounds nice", "I understand", "That sounds lovely"
+- Reflecting: "It sounds like you're feeling...", "It sounds like you're second-guessing..."
+- Open invitations: "Would you like to talk about it?", "Would you like to talk about what's been on your mind?"
+- Analysis: "Given how quickly she responded, she seems comfortable", "she's at least comfortable with the exchange"
+- Validation: "It's okay to feel sad", "That's understandable"
+
+CRITICAL: "Would you like to talk about X?" is NOT ASKED_ABOUT - it's an open invitation.
+CRITICAL: Analyzing someone's behavior is NOT EXPLAINED - no new information was provided.
 
 EXTRACTION RULES:
 1. Subject is ALWAYS "ASSISTANT" - never the user
-2. Only extract substantive actions - not pleasantries or acknowledgments
-3. Object should be the specific thing recommended/explained/asked about
-4. Include relevant context in metadata (reason, category, etc.)
-5. Return empty arrays if the assistant response is just acknowledgment or small talk
+2. ONLY extract if assistant gave CONCRETE, SPECIFIC, ACTIONABLE information
+3. Empathy, validation, and emotional support are NOT actions - return empty arrays
+4. "Would you like to talk about X?" is NOT an action - it's an open invitation
+5. Object must be a specific named thing (restaurant name, technical concept, etc.)
+6. Return empty arrays if unsure - false negatives are better than false positives
 
-EXAMPLES:
+EXAMPLES OF ACTIONS (extract these):
 
 Example 1 - Restaurant recommendation:
-User: "I'm looking for a good Italian restaurant for a date"
-Assistant: "I'd recommend Bella Vita in South Philly - they have amazing pasta and a romantic atmosphere!"
+User: "I'm looking for a good Italian restaurant"
+Assistant: "I'd recommend Bella Vita in South Philly - great pasta!"
 Output:
 {{
-  "entities": [
-    {{"name": "Bella Vita", "type": "Place", "attributes": {{"category": "restaurant", "cuisine": "Italian"}}}}
-  ],
-  "relationships": [
-    {{"subject": "ASSISTANT", "predicate": "RECOMMENDED", "object": "Bella Vita", "metadata": {{"reason": "romantic dinner", "location": "South Philly"}}}}
-  ]
+  "entities": [{{"name": "Bella Vita", "type": "Place", "attributes": {{"category": "restaurant"}}}}],
+  "relationships": [{{"subject": "ASSISTANT", "predicate": "RECOMMENDED", "object": "Bella Vita", "metadata": {{}}}}]
 }}
 
-Example 2 - Technical explanation:
+Example 2 - Technical explanation (user asked a question):
 User: "How does async/await work in Python?"
-Assistant: "Async/await is Python's syntax for writing asynchronous code. The async keyword defines a coroutine..."
+Assistant: "Async/await is Python's syntax for asynchronous code..."
 Output:
 {{
-  "entities": [
-    {{"name": "async/await in Python", "type": "Concept", "attributes": {{}}}}
-  ],
-  "relationships": [
-    {{"subject": "ASSISTANT", "predicate": "EXPLAINED", "object": "async/await in Python", "metadata": {{}}}}
-  ]
+  "entities": [{{"name": "async/await in Python", "type": "Concept", "attributes": {{}}}}],
+  "relationships": [{{"subject": "ASSISTANT", "predicate": "EXPLAINED", "object": "async/await in Python", "metadata": {{}}}}]
 }}
 
-Example 3 - Clarifying question:
-User: "I want to improve my morning routine"
-Assistant: "What time do you usually wake up? And are you looking to be more productive or more relaxed?"
+EXAMPLES OF NON-ACTIONS (return empty arrays):
+
+Example 3 - Empathy for breakup (NO extraction):
+User: "I broke up with my girlfriend and I'm feeling sad"
+Assistant: "I'm really sorry you're going through this. Breakups are never easy. Would you like to talk about what's been on your mind?"
 Output:
 {{
   "entities": [],
-  "relationships": [
-    {{"subject": "ASSISTANT", "predicate": "ASKED_ABOUT", "object": "wake up time", "metadata": {{}}}},
-    {{"subject": "ASSISTANT", "predicate": "ASKED_ABOUT", "object": "routine goals", "metadata": {{"options": "productive vs relaxed"}}}}
-  ]
+  "relationships": []
 }}
 
-Example 4 - Suggestion with approach:
-User: "My code is running slowly"
-Assistant: "I'd suggest profiling first to identify bottlenecks, then we can optimize the hot paths."
+Example 4 - Acknowledging family visit (NO extraction):
+User: "My mom and sister are coming to visit today"
+Assistant: "That sounds lovely! It must mean a lot to have them traveling to see you."
 Output:
 {{
-  "entities": [
-    {{"name": "code profiling", "type": "Concept", "attributes": {{}}}}
-  ],
-  "relationships": [
-    {{"subject": "ASSISTANT", "predicate": "SUGGESTED", "object": "code profiling", "metadata": {{"purpose": "identify bottlenecks"}}}}
-  ]
+  "entities": [],
+  "relationships": []
 }}
 
-Example 5 - Just acknowledgment (no extraction):
+Example 5 - Analysis without recommendation (NO extraction):
+User: "I texted my ex and she replied quickly"
+Assistant: "It sounds like she's comfortable with the exchange. Given how fast she responded, she probably doesn't mind hearing from you."
+Output:
+{{
+  "entities": [],
+  "relationships": []
+}}
+
+Example 6 - Open invitation to talk (NO extraction - NOT ASKED_ABOUT):
+User: "I broke up with my girlfriend and I'm sad"
+Assistant: "I'm sorry. Breakups are hard. Would you like to talk about what's been on your mind?"
+Output:
+{{
+  "entities": [],
+  "relationships": []
+}}
+
+Example 7 - Just acknowledgment (NO extraction):
 User: "Thanks for your help!"
 Assistant: "You're welcome! Let me know if you need anything else."
 Output:
