@@ -39,8 +39,11 @@ RELATIONSHIP TYPES:
 Ownership & Possession:
 - OWNS, RECEIVED_FROM
 
-Family:
-- SIBLING_OF, PARENT_OF, CHILD_OF, GRANDPARENT_OF, GRANDCHILD_OF
+Family (DIRECTION MATTERS - read carefully):
+- SIBLING_OF: Sister/Brother -SIBLING_OF-> USER (the sibling is subject)
+- PARENT_OF: Mom/Dad -PARENT_OF-> USER (the parent is subject)
+- CHILD_OF: USER -CHILD_OF-> Mom/Dad (the child is subject)
+- GRANDPARENT_OF, GRANDCHILD_OF: same pattern
 - RELATIVE_OF (for extended family: aunt, uncle, cousin)
 
 Romantic:
@@ -96,18 +99,21 @@ EXTRACTION RULES:
 
 EXAMPLES:
 
-Example 1 - Family members:
-Input: "My mom and sister are visiting from Boston"
+Example 1 - Family members with relationships:
+Input: "My mom and sister Justine are visiting from Boston. Justine is 24."
 Output:
 {{
   "entities": [
+    {{"name": "USER", "type": "Person", "attributes": {{}}}},
     {{"name": "Mom", "type": "Person", "attributes": {{"relationship": "mother"}}}},
-    {{"name": "Sister", "type": "Person", "attributes": {{"relationship": "sister"}}}},
+    {{"name": "Justine", "type": "Person", "attributes": {{"relationship": "sister", "age": "24"}}}},
     {{"name": "Boston", "type": "Place", "attributes": {{}}}}
   ],
   "relationships": [
+    {{"subject": "Mom", "predicate": "PARENT_OF", "object": "USER", "metadata": {{}}}},
+    {{"subject": "Justine", "predicate": "SIBLING_OF", "object": "USER", "metadata": {{"type": "sister"}}}},
     {{"subject": "Mom", "predicate": "LOCATED_AT", "object": "Boston", "metadata": {{"timeframe": "from"}}}},
-    {{"subject": "Sister", "predicate": "LOCATED_AT", "object": "Boston", "metadata": {{"timeframe": "from"}}}}
+    {{"subject": "Justine", "predicate": "LOCATED_AT", "object": "Boston", "metadata": {{"timeframe": "from"}}}}
   ]
 }}
 
@@ -190,6 +196,18 @@ GOOD: (do not extract - not a user fact)
 ERROR 4 - Inventing predicates:
 BAD:  USER -SOMEONE_REPRESENTING-> Justine
 GOOD: Justine -SIBLING_OF-> USER
+
+ERROR 5 - PARENT_OF direction reversed (VERY COMMON):
+BAD:  USER -PARENT_OF-> Mom (wrong! USER is not Mom's parent)
+GOOD: Mom -PARENT_OF-> USER (Mom is the parent, USER is the child)
+
+ERROR 6 - SIBLING_OF direction reversed:
+BAD:  USER -SIBLING_OF-> Justine (less clear)
+GOOD: Justine -SIBLING_OF-> USER (Justine is USER's sibling)
+
+ERROR 7 - Missing attributes like age:
+BAD:  {{"name": "Justine", "type": "Person", "attributes": {{}}}}
+GOOD: {{"name": "Justine", "type": "Person", "attributes": {{"age": "24", "relationship": "sister"}}}}
 """
 
 
